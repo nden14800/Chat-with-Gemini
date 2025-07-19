@@ -26,7 +26,6 @@
             --icon-hover-bg: #e0e0e0;
             --danger-color: #fa383e;
             --spinner-color: #0866ff;
-            --code-bg-color: #282c34; /* Atom One Dark default */
         }
 
         @media (prefers-color-scheme: dark) {
@@ -110,16 +109,16 @@
         .model-option.disabled .icon-right svg { fill: var(--secondary-text-color); }
 
         /* Chat Area */
-        #chat-messages { flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+        #chat-messages { flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 8px; } /* MODIFIED */
         .message { display: flex; gap: 8px; max-width: 90%; opacity: 0; animation: fadeIn 0.5s forwards; position: relative; }
         .message:hover .message-actions { opacity: 1; }
-        .message-content { padding: 6px 12px; border-radius: 16px; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; }
+        .message-content { padding: 2px 10px; border-radius: 14px; line-height: 1.35; white-space: pre-wrap; word-wrap: break-word; } /* MODIFIED */
         .text-display > span { opacity: 0; animation: fadeIn 0.4s forwards; }
         .message-content textarea { width: 100%; border: 1px solid var(--primary-color); border-radius: 8px; padding: 10px; font-family: 'Roboto', sans-serif; font-size: 1rem; resize: vertical; background-color: var(--input-bg-color); color: var(--input-text-color); }
-        .message .icon-wrapper { position: relative; width: 32px; height: 32px; flex-shrink: 0; margin-top: 0; }
+        .message .icon-wrapper { position: relative; width: 32px; height: 32px; flex-shrink: 0; margin-top: 0; } /* MODIFIED */
         .message .icon { width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
         .message .icon svg { width: 16px; height: 16px; }
-        .message-actions { position: absolute; bottom: -12px; display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; }
+        .message-actions { position: absolute; bottom: -8px; display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; } /* MODIFIED */
         .user-message .message-actions { right: 0; }
         .ai-message .message-actions { left: 40px; }
         .action-btn { background-color: var(--container-bg-color); border: 1px solid var(--border-color); border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -134,7 +133,7 @@
         .loader { position: absolute; top: -6px; left: -6px; width: 44px; height: 44px; animation: rotate 2s linear infinite; display: none; }
         .icon-wrapper.loading .loader { display: block; }
         .loader .path { stroke: var(--spinner-color); stroke-linecap: round; animation: dash 1.5s ease-in-out infinite; }
-        .code-snippet { margin: 8px 0; border-radius: 8px; overflow: hidden; background-color: var(--code-bg-color); }
+        .code-snippet { margin: 8px 0; border-radius: 8px; overflow: hidden; background-color: #282c34; }
         .code-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background-color: rgba(0,0,0,0.2); }
         .code-header .language { font-size: 0.8rem; color: #abb2bf; font-family: monospace; }
         .code-header .copy-code-btn { background: none; border: none; color: #abb2bf; cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; gap: 4px; font-size: 0.8rem; }
@@ -295,7 +294,7 @@
                 <div class="message-actions"></div>`;
             
             const contentEl = wrapper.querySelector('.text-display');
-            if (text) renderFormattedContent(text, contentEl);
+            renderFormattedContent(text, contentEl);
             
             const actionsContainer = wrapper.querySelector('.message-actions');
             if(sender === 'user') {
@@ -351,6 +350,7 @@
         const handleChatSubmit = (e) => { e.preventDefault(); const userInput = messageInput.value.trim(); if (userInput) handleApiRequest(userInput); };
         const handleApiRequest = async (prompt, isEdit = false, isRegenerate = false) => {
             if (!apiKey || !genAI) { displayMessage({role:'ai', parts:[{text:'APIキーが設定されていません。'}]}); return; }
+
             generationController.stop = false;
             toggleInputButtons(true);
             let currentChat = allChats.find(c => c.id === activeChatId);
@@ -370,6 +370,8 @@
                 const model = genAI.getGenerativeModel({ model: currentModelId });
                 const chatSession = model.startChat({ history: historyForApi.slice(0, -1) });
                 const result = await chatSession.sendMessageStream(prompt);
+                
+                content.innerHTML = ''; 
                 for await (const chunk of result.stream) {
                     if (generationController.stop) break;
                     const chunkText = chunk.text();
