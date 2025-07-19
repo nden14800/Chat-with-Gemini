@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with Gemini</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <style>
+        /* --- CSS Variables and Theme --- */
+        :root {
+            --bg-color: #f0f2f5;
+            --text-color: #050505;
+            --container-bg-color: #ffffff;
+            --sidebar-bg-color: #f7f7ff;
+            --input-bg-color: #e4e6eb;
+            --input-text-color: #050505;
+            --primary-color: #0866ff;
+            --secondary-text-color: #65676b;
+            --border-color: #dcdfe3;
+            --icon-color: #65676b;
+            --icon-hover-bg: #e0e0e0;
+            --danger-color: #fa383e;
+            --spinner-color: #0866ff;
+            --code-bg-color: #282c34; /* Atom One Dark default */
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #121212;
+                --text-color: #e4e6eb;
+                --container-bg-color: #1e1e1e;
+                --sidebar-bg-color: #242526;
+                --input-bg-color: #3a3b3c;
+                --input-text-color: #e4e6eb;
+                --primary-color: #2374e1;
+                --secondary-text-color: #b0b3b8;
+                --border-color: #3e4042;
+                --icon-color: #b0b3b8;
+                --icon-hover-bg: #4e4f50;
+                --danger-color: #ff4d4d;
+                --spinner-color: #2374e1;
+            }
+        }
+
+        /* --- Animations --- */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes rotate { 100% { transform: rotate(360deg); } }
+        @keyframes dash { 0% { stroke-dasharray: 1, 150; stroke-dashoffset: 0; } 50% { stroke-dasharray: 90, 150; stroke-dashoffset: -35; } 100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; } }
+
+        /* --- Base & Layout --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; }
+        body { font-family: 'Roboto', sans-serif; background-color: var(--bg-color); color: var(--text-color); display: flex; overflow: hidden; }
+
+        /* --- History Sidebar --- */
+        #history-sidebar { width: 260px; background-color: var(--sidebar-bg-color); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 12px; flex-shrink: 0; transition: width 0.3s ease, padding 0.3s ease, border 0.3s ease; overflow: hidden; }
+        #sidebar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .sidebar-btn { background: none; border: none; cursor: pointer; padding: 8px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .sidebar-btn svg { width: 18px; height: 18px; fill: var(--icon-color); }
+        .sidebar-btn:hover { background-color: var(--icon-hover-bg); }
+        #new-chat-btn { flex-grow: 1; text-align: left; border-radius: 8px; font-size: 0.9rem; padding: 8px 12px; color: var(--text-color); }
+        #search-container { position: relative; margin-bottom: 12px; }
+        #search-history-input { width: 100%; padding: 8px 12px 8px 36px; border-radius: 18px; border: 1px solid var(--border-color); background-color: var(--input-bg-color); color: var(--input-text-color); font-size: 0.9rem; font-family: 'Roboto', sans-serif; }
+        #search-icon { position: absolute; top: 50%; left: 12px; transform: translateY(-50%); width: 16px; height: 16px; fill: var(--secondary-text-color); }
+        #history-list { list-style: none; flex-grow: 1; overflow-y: auto; }
+        .history-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+        .history-item:hover { background-color: var(--icon-hover-bg); }
+        .history-item.active { background-color: var(--primary-color); color: white; }
+        .history-item.active .sidebar-btn svg { fill: white; }
+        .history-item .delete-chat-btn { display: none; }
+        .history-item:hover .delete-chat-btn, .history-item.active .delete-chat-btn { display: flex; }
+        .history-title { flex-grow: 1; overflow: hidden; text-overflow: ellipsis; }
+        body.sidebar-hidden #history-sidebar { width: 0; padding: 12px 0; border-right-width: 0; }
+        body.sidebar-hidden #show-sidebar-btn { display: flex; }
+
+        /* --- Main Chat Container --- */
+        #app-container { flex-grow: 1; height: 100vh; display: flex; flex-direction: column; background-color: var(--container-bg-color); position: relative; }
+        #show-sidebar-btn { position: absolute; top: 10px; left: 10px; z-index: 50; display: none; background-color: var(--container-bg-color); border: 1px solid var(--border-color); box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+        #header { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--border-color); flex-shrink: 0; gap: 16px; }
+        #header h1 { font-size: 1.2rem; font-weight: 500; margin-right: auto;}
+        #settings-btn { background: none; border: none; cursor: pointer; padding: 8px; border-radius: 50%; }
+        #settings-btn svg { width: 20px; height: 20px; fill: var(--icon-color); }
+        #settings-btn:hover { background-color: var(--icon-hover-bg); }
+
+        /* Model Selector */
+        #model-selector { position: relative; font-family: 'Roboto', sans-serif; }
+        #current-model-btn { background-color: var(--container-bg-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background-color 0.2s, border-color 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); font-family: 'Roboto', sans-serif; }
+        #current-model-btn:hover { background-color: var(--icon-hover-bg); border-color: #c0c2c5; }
+        .chevron-icon { width: 16px; height: 16px; fill: var(--secondary-text-color); }
+        #model-selector .chevron-up { display: none; }
+        #model-selector.open .chevron-up { display: block; }
+        #model-selector.open .chevron-down { display: none; }
+        #model-options { display: none; position: absolute; top: calc(100% + 8px); right: 0; background-color: var(--container-bg-color); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); width: 260px; z-index: 100; padding: 8px; }
+        #model-options.visible { display: block; animation: fadeIn 0.2s forwards; }
+        .model-option { display: flex; align-items: center; justify-content: space-between; padding: 12px; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; }
+        .model-option:not(.disabled):hover { background-color: var(--icon-hover-bg); }
+        .model-option-details { display: flex; flex-direction: column; gap: 2px; }
+        .model-name-text { font-size: 0.9rem; font-weight: 500; color: var(--text-color); display: flex; align-items: center; gap: 8px; }
+        .model-id-text { font-size: 0.8rem; color: var(--secondary-text-color); margin-left: 4px; }
+        .model-tag { font-size: 0.7rem; font-weight: 500; background-color: var(--input-bg-color); color: var(--secondary-text-color); padding: 2px 6px; border-radius: 4px; }
+        .model-option.selected .model-name-text { color: var(--primary-color); }
+        .model-option .icon-right svg { width: 18px; height: 18px; fill: var(--primary-color); }
+        .model-option.disabled { opacity: 0.6; cursor: not-allowed; }
+        .model-option.disabled .model-name-text, .model-option.disabled .model-id-text { color: var(--secondary-text-color); }
+        .model-option.disabled .icon-right svg { fill: var(--secondary-text-color); }
+
+        /* Chat Area */
+        #chat-messages { flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+        .message { display: flex; gap: 8px; max-width: 90%; opacity: 0; animation: fadeIn 0.5s forwards; position: relative; }
+        .message:hover .message-actions { opacity: 1; }
+        .message-content { padding: 6px 12px; border-radius: 16px; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; }
+        .text-display > span { opacity: 0; animation: fadeIn 0.4s forwards; }
+        .message-content textarea { width: 100%; border: 1px solid var(--primary-color); border-radius: 8px; padding: 10px; font-family: 'Roboto', sans-serif; font-size: 1rem; resize: vertical; background-color: var(--input-bg-color); color: var(--input-text-color); }
+        .message .icon-wrapper { position: relative; width: 32px; height: 32px; flex-shrink: 0; margin-top: 0; }
+        .message .icon { width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .message .icon svg { width: 16px; height: 16px; }
+        .message-actions { position: absolute; bottom: -12px; display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; }
+        .user-message .message-actions { right: 0; }
+        .ai-message .message-actions { left: 40px; }
+        .action-btn { background-color: var(--container-bg-color); border: 1px solid var(--border-color); border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .action-btn:hover { background-color: var(--icon-hover-bg); }
+        .action-btn svg { width: 14px; height: 14px; fill: var(--icon-color); }
+
+        /* AI Message & Loader & Code Snippet */
+        .ai-message { align-self: flex-start; }
+        .ai-message .message-content { background-color: var(--input-bg-color); color: var(--text-color); border-top-left-radius: 4px; }
+        .ai-message .icon { background-color: var(--primary-color); }
+        .ai-message .icon svg { fill: #fff; }
+        .loader { position: absolute; top: -6px; left: -6px; width: 44px; height: 44px; animation: rotate 2s linear infinite; display: none; }
+        .icon-wrapper.loading .loader { display: block; }
+        .loader .path { stroke: var(--spinner-color); stroke-linecap: round; animation: dash 1.5s ease-in-out infinite; }
+        .code-snippet { margin: 8px 0; border-radius: 8px; overflow: hidden; background-color: var(--code-bg-color); }
+        .code-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background-color: rgba(0,0,0,0.2); }
+        .code-header .language { font-size: 0.8rem; color: #abb2bf; font-family: monospace; }
+        .code-header .copy-code-btn { background: none; border: none; color: #abb2bf; cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; gap: 4px; font-size: 0.8rem; }
+        .code-header .copy-code-btn:hover { background-color: rgba(255,255,255,0.1); }
+        .code-header .copy-code-btn svg { width: 14px; height: 14px; fill: currentColor; }
+        .code-snippet pre { margin: 0; }
+        .code-snippet code.hljs { padding: 12px; font-size: 0.9rem; }
+
+        /* User Message */
+        .user-message { align-self: flex-end; flex-direction: row-reverse; }
+        .user-message .message-content { background-color: var(--primary-color); color: #fff; border-top-right-radius: 4px; }
+        .user-message .icon-wrapper { display: none; }
+
+        /* Input Form */
+        #chat-form { display: flex; padding: 20px; border-top: 1px solid var(--border-color); gap: 10px; flex-shrink: 0; }
+        #message-input { flex-grow: 1; padding: 12px 16px; border-radius: 22px; border: 1px solid var(--border-color); background-color: var(--input-bg-color); color: var(--input-text-color); font-size: 1rem; resize: none; height: 44px; line-height: 1.25; font-family: 'Roboto', sans-serif; }
+        #message-input:focus { outline: none; border-color: var(--primary-color); }
+        .input-btn { color: white; border: none; border-radius: 50%; width: 44px; height: 44px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .input-btn svg { width: 20px; height: 20px; fill: white; }
+        .input-btn:hover { opacity: 0.9; }
+        #send-btn { background-color: var(--primary-color); }
+        #send-btn:disabled { background-color: var(--secondary-text-color); cursor: not-allowed; }
+        #stop-btn { background-color: var(--danger-color); display: none; }
+
+        /* Settings Modal */
+        #settings-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        #settings-modal.visible { opacity: 1; pointer-events: auto; }
+        #settings-content { background-color: var(--container-bg-color); padding: 24px; border-radius: 8px; width: 90%; max-width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); position: relative; }
+        #settings-content h2 { margin-bottom: 16px; font-size: 1.25rem; padding-right: 40px; }
+        #modal-close-btn { position: absolute; top: 12px; right: 12px; background: none; border: none; cursor: pointer; padding: 8px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        #modal-close-btn svg { width: 20px; height: 20px; fill: var(--icon-color); }
+        #modal-close-btn:hover { background-color: var(--icon-hover-bg); }
+        #settings-content p { font-size: 0.9rem; color: var(--secondary-text-color); margin-bottom: 20px; }
+        #api-key-input { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background-color: var(--input-bg-color); color: var(--input-text-color); font-size: 0.9rem; margin-bottom: 20px; }
+        #settings-actions { display: flex; justify-content: flex-end; }
+        #save-api-key-btn { padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer; font-weight: 500; background-color: var(--primary-color); color: white; }
+        #save-api-key-btn:hover { opacity: 0.8; }
+    </style>
+</head>
+<body class="">
+
+    <aside id="history-sidebar">
+        <div id="sidebar-header">
+            <button id="new-chat-btn" class="sidebar-btn">新しいチャット</button>
+            <button id="delete-all-chats-btn" class="sidebar-btn" title="全履歴を削除"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/></svg></button>
+            <button id="hide-sidebar-btn" class="sidebar-btn" title="履歴を非表示"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-chevron-left" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0"/></svg></button>
+        </div>
+        <div id="search-container">
+            <svg id="search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/></svg>
+            <input type="text" id="search-history-input" placeholder="履歴を検索...">
+        </div>
+        <ul id="history-list"></ul>
+    </aside>
+
+    <div id="app-container">
+        <button id="show-sidebar-btn" class="sidebar-btn" title="履歴を表示"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-chevron-right" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708"/></svg></button>
+        <header id="header">
+            <h1>Chat with Gemini</h1>
+            <div id="model-selector">
+                <button id="current-model-btn">
+                    <span id="current-model-name"></span>
+                    <svg class="chevron-icon chevron-down" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"/></svg>
+                    <svg class="chevron-icon chevron-up" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M7.646 4.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1-.708.708L8 5.707l-5.646 5.647a.5.5 0 0 1-.708-.708z"/></svg>
+                </button>
+                <div id="model-options"></div>
+            </div>
+            <button id="settings-btn" title="設定"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492M5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0"/><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527-1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764-.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115z"/></svg></button>
+        </header>
+
+        <div id="chat-messages"></div>
+
+        <form id="chat-form">
+            <textarea id="message-input" placeholder="メッセージを送信..." rows="1"></textarea>
+            <button id="send-btn" class="input-btn" type="submit" title="送信" disabled><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576zm6.787-8.201L1.591 6.602l4.339 2.76z"/></svg></button>
+            <button id="stop-btn" class="input-btn" type="button" title="停止"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/><path d="M5 6.5A1.5 1.5 0 0 1 6.5 5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5z"/></svg></button>
+        </form>
+    </div>
+
+    <div id="settings-modal">
+        <div id="settings-content">
+            <button id="modal-close-btn" title="閉じる"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8z"/></svg></button>
+            <h2>設定</h2><p>Gemini APIキーを入力してください。APIキーはブラウザ内にのみ保存されます。</p>
+            <input type="password" id="api-key-input" placeholder="ここにAPIキーを貼り付け">
+            <div id="settings-actions"><button id="save-api-key-btn">保存</button></div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+
+        // --- DOM Elements ---
+        const getEl = (id) => document.getElementById(id);
+        const body = document.body, chatMessages = getEl('chat-messages'), chatForm = getEl('chat-form'), 
+              messageInput = getEl('message-input'), sendButton = getEl('send-btn'), stopButton = getEl('stop-btn'), 
+              settingsBtn = getEl('settings-btn'), settingsModal = getEl('settings-modal'), modalCloseBtn = getEl('modal-close-btn'), 
+              saveApiKeyBtn = getEl('save-api-key-btn'), apiKeyInput = getEl('api-key-input'), historyList = getEl('history-list'), 
+              newChatBtn = getEl('new-chat-btn'), deleteAllChatsBtn = getEl('delete-all-chats-btn'), 
+              searchHistoryInput = getEl('search-history-input'), modelSelector = getEl('model-selector'), 
+              modelSelectorBtn = getEl('current-model-btn'), modelOptionsContainer = getEl('model-options'), 
+              currentModelNameEl = getEl('current-model-name'), hideSidebarBtn = getEl('hide-sidebar-btn'),
+              showSidebarBtn = getEl('show-sidebar-btn');
+        
+        // --- State & Config ---
+        let apiKey = localStorage.getItem('gemini-api-key');
+        let genAI;
+        let allChats = [];
+        let activeChatId = null;
+        let generationController = { stop: false };
+        const supportedModels = [ { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', available: true }, { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', available: false } ];
+        let currentModelId = 'gemini-2.5-flash';
+
+        // --- Core Functions ---
+        const initializeAiClient = () => { if (apiKey) genAI = new GoogleGenerativeAI(apiKey); apiKeyInput.value = apiKey || ''; };
+        const scrollToBottom = () => chatMessages.scrollTop = chatMessages.scrollHeight;
+        const toggleInputButtons = (isGenerating) => { sendButton.style.display = isGenerating ? 'none' : 'flex'; stopButton.style.display = isGenerating ? 'flex' : 'none'; messageInput.disabled = isGenerating; if(!isGenerating) messageInput.focus(); };
+
+        // --- History & Storage Management ---
+        const saveChatsToStorage = () => localStorage.setItem('gemini-chats', JSON.stringify(allChats));
+        const loadChatsFromStorage = () => allChats = JSON.parse(localStorage.getItem('gemini-chats') || '[]');
+        const renderHistory = () => {
+            historyList.innerHTML = '';
+            const filteredChats = allChats.filter(chat => chat.title.toLowerCase().includes(searchHistoryInput.value.toLowerCase()));
+            filteredChats.sort((a, b) => b.id - a.id).forEach(chat => {
+                const item = document.createElement('li');
+                item.className = 'history-item';
+                item.dataset.id = chat.id;
+                if (chat.id === activeChatId) item.classList.add('active');
+                item.innerHTML = `<span class="history-title">${chat.title}</span><button class="sidebar-btn delete-chat-btn" title="履歴を削除"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/></svg></button>`;
+                item.addEventListener('click', (e) => { e.stopPropagation(); e.target.closest('.delete-chat-btn') ? deleteChat(chat.id) : switchChat(chat.id); });
+                historyList.appendChild(item);
+            });
+        };
+        const createNewChat = () => { activeChatId = null; chatMessages.innerHTML = ''; displayMessage({role:'ai', parts:[{text:'こんにちは！何かお手伝いできることはありますか？'}]}); renderHistory(); };
+        const switchChat = (chatId) => { activeChatId = chatId; const chat = allChats.find(c => c.id === chatId); renderMessages(chat.messages); renderHistory(); };
+        const deleteChat = (chatId) => { if (!confirm('このチャット履歴を削除しますか？')) return; allChats = allChats.filter(c => c.id !== chatId); saveChatsToStorage(); if (activeChatId === chatId) createNewChat(); else renderHistory(); };
+        const renderMessages = (messages) => { chatMessages.innerHTML = ''; messages.forEach((msg, index) => displayMessage(msg, index === messages.length - 1)); };
+
+        // --- Message Display & Actions ---
+        const displayMessage = (message, isLastMessage = false) => {
+            const { role, parts } = message;
+            const text = parts[0].text;
+            const sender = role === 'user' ? 'user' : 'ai';
+            const chat = allChats.find(c => c.id === activeChatId);
+            const messageIndex = chat ? chat.messages.indexOf(message) : -1;
+
+            const wrapper = document.createElement('div');
+            wrapper.className = `message ${sender}-message fade-in`;
+            wrapper.dataset.messageIndex = messageIndex;
+            wrapper.innerHTML = `
+                <div class="icon-wrapper">
+                    <div class="icon">${sender === 'ai' ? `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-stars" viewBox="0 0 16 16"><path d="M7.657 6.247c.11-.33.576-.33.686 0l.645 1.937a2.89 2.89 0 0 0 1.829 1.828l1.936.645c.33.11.33.576 0 .686l-1.937.645a2.89 2.89 0 0 0-1.828 1.829l-.645 1.936a.361.361 0 0 1-.686 0l-.645-1.937a2.89 2.89 0 0 0-1.828-1.828l-1.937-.645a.361.361 0 0 1 0-.686l1.937-.645a2.89 2.89 0 0 0 1.828-1.828zM3.794 1.148a.217.217 0 0 1 .412 0l.387 1.162c.173.518.579.924 1.097 1.097l1.162.387a.217.217 0 0 1 0 .412l-1.162.387A1.73 1.73 0 0 0 4.593 5.69l-.387 1.162a.217.217 0 0 1-.412 0L3.407 5.69A1.73 1.73 0 0 0 2.31 4.593l-1.162-.387a.217.217 0 0 1 0-.412l1.162-.387A1.73 1.73 0 0 0 3.407 2.31zM10.863.099a.145.145 0 0 1 .274 0l.258.774c.115.346.386.617.732.732l.774.258a.145.145 0 0 1 0 .274l-.774.258a1.16 1.16 0 0 0-.732.732l-.258.774a.145.145 0 0 1-.274 0l-.258-.774a1.16 1.16 0 0 0-.732-.732L9.1 2.137a.145.145 0 0 1 0-.274l.774-.258c.346-.115.617-.386.732-.732z"/></svg>` : ''}</div>
+                    <div class="loader"><svg viewBox="0 0 50 50"><circle class="path" cx="25" cy="25" r="20" fill="none" stroke-width="3.5"></circle></svg></div>
+                </div>
+                <div class="message-content">
+                    <div class="text-display"></div>
+                    <textarea class="edit-area" style="display: none;"></textarea>
+                </div>
+                <div class="message-actions"></div>`;
+            
+            const contentEl = wrapper.querySelector('.text-display');
+            if (text) renderFormattedContent(text, contentEl);
+            
+            const actionsContainer = wrapper.querySelector('.message-actions');
+            if(sender === 'user') {
+                actionsContainer.innerHTML = `<button class="action-btn edit-btn" title="編集"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pen" viewBox="0 0 16 16"><path d="m13.498.795.149-.149a1.207 1.207 0 1 1 1.707 1.708l-.149.148a1.5 1.5 0 0 1-.059 2.059L4.854 14.854a.5.5 0 0 1-.233.131l-4 1a.5.5 0 0 1-.606-.606l1-4a.5.5 0 0 1 .131-.232l9.642-9.642a.5.5 0 0 0-.642.056L6.854 4.854a.5.5 0 1 1-.708-.708L9.44.854A1.5 1.5 0 0 1 11.5.796a1.5 1.5 0 0 1 1.998-.001m-.644.766a.5.5 0 0 0-.707 0L1.95 11.756l-.764 3.057 3.057-.764L14.44 3.854a.5.5 0 0 0 0-.708z"/></svg></button>`;
+                actionsContainer.querySelector('.edit-btn').addEventListener('click', (e) => enterEditMode(e.currentTarget.closest('.message')));
+            } else if (sender === 'ai') {
+                actionsContainer.innerHTML += `<button class="action-btn copy-all-btn" title="回答をコピー"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-copy" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M4 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zM2 5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1h1v1a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1v1z"/></svg></button>`;
+                if (isLastMessage) {
+                    actionsContainer.innerHTML += `<button class="action-btn regenerate-btn" title="再生成"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-clockwise" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466"/></svg></button>`;
+                    actionsContainer.querySelector('.regenerate-btn').addEventListener('click', () => regenerateResponse());
+                }
+                actionsContainer.querySelector('.copy-all-btn').addEventListener('click', (e) => copyToClipboard(contentEl.textContent, e.currentTarget));
+            }
+
+            chatMessages.appendChild(wrapper);
+            scrollToBottom();
+            return { wrapper, content: contentEl, icon: wrapper.querySelector('.icon-wrapper') };
+        };
+
+        // --- Message Edit & Regenerate ---
+        const enterEditMode = (messageEl) => {
+            const textDisplay = messageEl.querySelector('.text-display');
+            const editArea = messageEl.querySelector('.edit-area');
+            editArea.value = textDisplay.textContent;
+            editArea.style.display = 'block';
+            textDisplay.style.display = 'none';
+            messageEl.querySelector('.message-actions').innerHTML = `<button class="action-btn save-edit-btn">保存</button><button class="action-btn cancel-edit-btn">キャンセル</button>`;
+            messageEl.querySelector('.save-edit-btn').addEventListener('click', () => saveEdit(messageEl));
+            messageEl.querySelector('.cancel-edit-btn').addEventListener('click', () => exitEditMode());
+            editArea.focus();
+        };
+        const exitEditMode = () => renderMessages(allChats.find(c => c.id === activeChatId).messages);
+        const saveEdit = (messageEl) => {
+            const chat = allChats.find(c => c.id === activeChatId);
+            const messageIndex = parseInt(messageEl.dataset.messageIndex, 10);
+            const newText = messageEl.querySelector('.edit-area').value.trim();
+            if (!newText) return;
+            chat.messages[messageIndex].parts[0].text = newText;
+            chat.messages = chat.messages.slice(0, messageIndex + 1);
+            renderMessages(chat.messages);
+            handleApiRequest(newText, true);
+        };
+        const regenerateResponse = () => {
+            const chat = allChats.find(c => c.id === activeChatId);
+            if (!chat || chat.messages.length < 2) return;
+            chat.messages.pop();
+            renderMessages(chat.messages);
+            const lastUserPrompt = chat.messages[chat.messages.length - 1].parts[0].text;
+            handleApiRequest(lastUserPrompt, false, true);
+        };
+        
+        // --- Chat Submission & API Logic ---
+        const handleChatSubmit = (e) => { e.preventDefault(); const userInput = messageInput.value.trim(); if (userInput) handleApiRequest(userInput); };
+        const handleApiRequest = async (prompt, isEdit = false, isRegenerate = false) => {
+            if (!apiKey || !genAI) { displayMessage({role:'ai', parts:[{text:'APIキーが設定されていません。'}]}); return; }
+            generationController.stop = false;
+            toggleInputButtons(true);
+            let currentChat = allChats.find(c => c.id === activeChatId);
+            if (!isEdit && !isRegenerate) {
+                if (!currentChat) { activeChatId = Date.now(); currentChat = { id: activeChatId, title: prompt.substring(0, 30) + '...', messages: [] }; allChats.push(currentChat); }
+                currentChat.messages.push({ role: 'user', parts: [{ text: prompt }] });
+                displayMessage(currentChat.messages[currentChat.messages.length - 1]);
+                messageInput.value = ''; messageInput.style.height = '44px'; sendButton.disabled = true;
+            }
+
+            const { content, icon } = displayMessage({role:'ai', parts:[{text:''}]}, true);
+            icon.classList.add('loading');
+            let fullResponseText = "";
+            
+            try {
+                const historyForApi = currentChat.messages.map(msg => ({ role: msg.role, parts: msg.parts }));
+                const model = genAI.getGenerativeModel({ model: currentModelId });
+                const chatSession = model.startChat({ history: historyForApi.slice(0, -1) });
+                const result = await chatSession.sendMessageStream(prompt);
+                for await (const chunk of result.stream) {
+                    if (generationController.stop) break;
+                    const chunkText = chunk.text();
+                    fullResponseText += chunkText;
+                    const span = document.createElement('span');
+                    span.textContent = chunkText;
+                    content.appendChild(span);
+                    scrollToBottom();
+                }
+            } catch (error) { console.error("Gemini API Error:", error); fullResponseText = 'エラーが発生しました。';
+            } finally {
+                if (generationController.stop) fullResponseText += "\n(回答が中断されました)";
+                currentChat.messages.push({ role: "model", parts: [{ text: fullResponseText }] });
+                renderFormattedContent(fullResponseText, content);
+                saveChatsToStorage();
+                renderHistory();
+                renderMessages(currentChat.messages);
+                icon.classList.remove('loading');
+                toggleInputButtons(false);
+            }
+        };
+
+        // --- Formatting & Event Listeners ---
+        const renderFormattedContent = (text, element) => {
+            element.innerHTML = '';
+            const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
+            let lastIndex = 0;
+            let match;
+            while ((match = codeBlockRegex.exec(text)) !== null) {
+                const [fullMatch, lang, code] = match;
+                if (match.index > lastIndex) {
+                    const plainText = text.substring(lastIndex, match.index);
+                    const p = document.createElement('p');
+                    p.style.margin = '0';
+                    p.textContent = plainText;
+                    element.appendChild(p);
+                }
+                const snippet = document.createElement('div');
+                snippet.className = 'code-snippet';
+                snippet.innerHTML = `
+                    <div class="code-header">
+                        <span class="language">${lang || 'code'}</span>
+                        <button class="copy-code-btn"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-copy" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M4 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zM2 5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1h1v1a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1v1z"/></svg> <span>Copy</span></button>
+                    </div><pre><code class="${lang ? `language-${lang}` : ''}">${hljs.highlightAuto(code).value}</code></pre>`;
+                snippet.querySelector('.copy-code-btn').addEventListener('click', (e) => copyToClipboard(code, e.currentTarget));
+                element.appendChild(snippet);
+                lastIndex = match.index + fullMatch.length;
+            }
+            if (lastIndex < text.length) {
+                const p = document.createElement('p');
+                p.style.margin = '0';
+                p.textContent = text.substring(lastIndex);
+                element.appendChild(p);
+            }
+        };
+
+        const copyToClipboard = (text, element) => {
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = element.innerHTML;
+                element.innerHTML = 'Copied!';
+                setTimeout(() => { element.innerHTML = originalText; }, 1500);
+            });
+        };
+
+        chatForm.addEventListener('submit', handleChatSubmit);
+        stopButton.addEventListener('click', () => generationController.stop = true);
+        newChatBtn.addEventListener('click', createNewChat);
+        deleteAllChatsBtn.addEventListener('click', () => { if (!confirm('すべてのチャット履歴を削除しますか？この操作は元に戻せません。')) return; allChats = []; activeChatId = null; saveChatsToStorage(); createNewChat(); });
+        searchHistoryInput.addEventListener('input', renderHistory);
+        messageInput.addEventListener('input', () => { sendButton.disabled = messageInput.value.trim().length === 0; messageInput.style.height = 'auto'; messageInput.style.height = `${Math.min(messageInput.scrollHeight, 200)}px`; });
+        messageInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !sendButton.disabled) { e.preventDefault(); chatForm.requestSubmit(); } });
+        hideSidebarBtn.addEventListener('click', () => body.classList.add('sidebar-hidden'));
+        showSidebarBtn.addEventListener('click', () => body.classList.remove('sidebar-hidden'));
+        
+        const renderModelSelector = () => {
+            const selectedModel = supportedModels.find(m => m.id === currentModelId);
+            currentModelNameEl.textContent = selectedModel.name;
+            modelOptionsContainer.innerHTML = supportedModels.map(model => `
+                <div class="model-option ${model.id === currentModelId ? 'selected' : ''} ${!model.available ? 'disabled' : ''}" data-model-id="${model.id}">
+                    <div class="model-option-details">
+                        <span class="model-name-text">${model.name} ${!model.available ? `<span class="model-tag">近日登場</span>` : ''}</span>
+                        <span class="model-id-text">${model.id}</span>
+                    </div>
+                    <div class="icon-right">
+                        ${model.id === currentModelId ? `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check2" viewBox="0 0 16 16"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0"/></svg>` : ''}
+                        ${!model.available ? `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-lock" viewBox="0 0 16 16"><path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2m3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2M5 8h6a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1"/></svg>` : ''}
+                    </div>
+                </div>`).join('');
+             modelOptionsContainer.querySelectorAll('.model-option').forEach(el => { el.addEventListener('click', (e) => { const id = e.currentTarget.dataset.modelId; const model = supportedModels.find(m => m.id === id); if (model && model.available) { currentModelId = id; renderModelSelector(); modelSelector.classList.remove('open'); modelOptionsContainer.classList.remove('visible'); } }); });
+        };
+        modelSelectorBtn.addEventListener('click', () => { modelSelector.classList.toggle('open'); modelOptionsContainer.classList.toggle('visible'); });
+        document.addEventListener('click', (e) => { if (!modelSelector.contains(e.target)) { modelSelector.classList.remove('open'); modelOptionsContainer.classList.remove('visible'); } });
+
+        const showSettingsModal = (v) => settingsModal.classList.toggle('visible', v);
+        settingsBtn.addEventListener('click', () => showSettingsModal(true));
+        modalCloseBtn.addEventListener('click', () => showSettingsModal(false));
+        settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) showSettingsModal(false); });
+        saveApiKeyBtn.addEventListener('click', () => { const newApiKey = apiKeyInput.value.trim(); if (newApiKey) { localStorage.setItem('gemini-api-key', newApiKey); apiKey = newApiKey; initializeAiClient(); showSettingsModal(false); } });
+
+        const initializeApp = () => {
+            loadChatsFromStorage();
+            initializeAiClient();
+            renderModelSelector();
+            if (allChats.length > 0) switchChat(allChats.sort((a,b) => b.id - a.id)[0].id); else createNewChat();
+            if (!apiKey) { setTimeout(() => { chatMessages.innerHTML = ''; displayMessage({role:'ai',parts:[{text:'ようこそ！右上の設定アイコンからGemini APIキーを設定してください。'}]}); }, 100); }
+        };
+
+        initializeApp();
+    </script>
+</body>
+</html>
